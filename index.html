@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090a0d">
+  <title>Golden Freddy — Archivo de animatrónicos</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">F</div>
+        <div class="brand-copy">
+          <strong>FREDDY FAZBEAR'S</strong>
+          <span>ARCHIVO DE ANIMATRÓNICOS</span>
+        </div>
+      </div>
+      <div class="top-meta">
+        <span class="meta-location">Depósito · Sector 03</span>
+        <span>Unidad GF-01</span>
+        <span class="live"><i></i> En observación</span>
+      </div>
+    </header>
+
+    <section class="workspace" aria-label="Visor de animatrónico">
+      <aside class="controls" aria-label="Controles del visor">
+        <div class="controls-head">
+          <div>
+            <div class="eyebrow">Expediente 04 / 1987</div>
+            <h1>Golden Freddy</h1>
+          </div>
+        </div>
+        <p class="subtitle" id="viewer-instructions">Visor local Three.js. Arrastra para orbitar y usa la rueda para acercar la unidad.</p>
+        <div class="divider"></div>
+        <div class="inspect-controls">
+          <button class="inspect-toggle" id="inspection-toggle" type="button" aria-pressed="false" disabled>
+            <span class="inspect-indicator" aria-hidden="true"></span>
+            Modo inspección
+          </button>
+          <button class="clear-selection" id="clear-selection" type="button" disabled>
+            Limpiar selección
+          </button>
+        </div>
+        <div class="hat-controls">
+          <button class="inspect-toggle" id="hat-toggle" type="button" aria-describedby="hat-status" disabled>Retirar sombrero</button>
+          <p class="structure-note" id="hat-status" role="status" aria-live="polite">Preparando prueba del sombrero.</p>
+        </div>
+        <div class="section-heading"><span>Visor local</span><span id="viewer-mode-label">CÁMARA</span></div>
+      </aside>
+
+      <div class="stage" id="viewer">
+        <canvas id="scene" aria-label="Modelo 3D local de Golden Freddy"></canvas>
+        <div class="viewer-status" id="viewer-status" role="status" aria-live="polite">
+          <span class="viewer-spinner" aria-hidden="true"></span>
+          <span>Cargando modelo local…</span>
+        </div>
+      </div>
+
+      <aside class="readout" aria-label="Información del modelo">
+        <div class="section-heading"><span>Estado del visor</span><span>●</span></div>
+        <div class="readout-name">Golden Freddy</div>
+        <div class="readout-state" id="readout-state">Preparando el visor local.</div>
+        <div class="spec-grid">
+          <div><span>Mallas</span><strong id="mesh-count">—</strong></div>
+          <div><span>Nodos</span><strong id="node-count">—</strong></div>
+          <div><span>Materiales</span><strong id="material-count">—</strong></div>
+          <div><span>Texturas</span><strong id="texture-count">—</strong></div>
+        </div>
+        <section class="selection-panel" aria-labelledby="selection-title">
+          <div class="selection-heading">
+            <span class="eyebrow" id="selection-title">Selección</span>
+            <span id="selection-type-badge">—</span>
+          </div>
+          <p class="selection-empty" id="selection-empty">Activa el modo inspección y haz clic en el modelo para consultar una malla.</p>
+          <dl class="selection-details" id="selection-details" hidden>
+            <div><dt>Malla</dt><dd id="selected-mesh-name">—</dd></div>
+            <div><dt>Objeto</dt><dd id="selected-object-type">—</dd></div>
+            <div><dt>Material</dt><dd id="selected-material">—</dd></div>
+            <div><dt>Nodo padre</dt><dd id="selected-parent">—</dd></div>
+          </dl>
+          <p class="selection-mesh-note" id="selection-mesh-note" hidden></p>
+          <div class="hierarchy-block" id="hierarchy-block" hidden>
+            <span class="detail-label">Jerarquía hasta la raíz</span>
+            <ol class="hierarchy-list" id="selection-hierarchy"></ol>
+          </div>
+        </section>
+        <section class="structure-summary" aria-labelledby="structure-title">
+          <span class="detail-label" id="structure-title">Tipos de nodo</span>
+          <p class="type-summary" id="type-summary">Mesh — · SkinnedMesh — · Bone — · Group — · Object3D —</p>
+          <span class="detail-label">Nombres del rig</span>
+          <p class="rig-summary" id="rig-summary">Pendiente de inspección del GLB.</p>
+          <p class="structure-note" id="structure-note">Los huesos nombrados pertenecen al rig; no implican piezas desmontables.</p>
+        </section>
+      </aside>
+    </section>
+
+    <footer class="bottombar">
+      <div class="bottom-note"><span class="live"><i></i></span><b>Visor local</b><span>Rotar · Zoom</span></div>
+      <div class="credit-note">
+        <span>Modelo:</span>
+        <a href="https://skfb.ly/psGv7" target="_blank" rel="noopener noreferrer">FNaF HW Golden Freddy ReTexture &amp; Remesh</a>
+        <span>por Captain Allen ·</span>
+        <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>
+      </div>
+    </footer>
+  </main>
+  <noscript><div class="noscript">Este visor necesita JavaScript para cargar el modelo 3D.</div></noscript>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
