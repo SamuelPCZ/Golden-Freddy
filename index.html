@@ -50,11 +50,88 @@
           <button class="clear-selection" id="clear-selection" type="button" disabled>
             Limpiar selección
           </button>
+          <button class="inspect-toggle" id="center-view" type="button" disabled>Centrar vista</button>
         </div>
         <div class="hat-controls">
           <button class="inspect-toggle" id="hat-toggle" type="button" aria-describedby="hat-status" disabled>Retirar sombrero</button>
           <p class="structure-note" id="hat-status" role="status" aria-live="polite">Preparando prueba del sombrero.</p>
         </div>
+        <div class="jaw-controls">
+          <button class="inspect-toggle" id="jaw-toggle" type="button" aria-describedby="jaw-status" disabled>Abrir mandíbula</button>
+          <p class="structure-note" id="jaw-status" role="status">Preparando control de mandíbula.</p>
+        </div>
+        <div class="maintenance-controls">
+          <label for="maintenance-mode">Mantenimiento facial</label>
+          <select id="maintenance-mode" disabled>
+            <option value="shell">Apertura de carcasa</option>
+            <option value="funtime" disabled>Apertura Funtime · Pausada</option>
+            <option value="exterior" disabled>Retirar cabeza exterior</option>
+          </select>
+        </div>
+        <div class="shell-controls" id="shell-controls">
+          <label for="shell-opening">Apertura de carcasa</label>
+          <output id="shell-value" for="shell-opening">0 %</output>
+          <input id="shell-opening" type="range" min="0" max="100" step="1" value="0" aria-valuetext="0 %" aria-describedby="shell-status" autocomplete="off" disabled>
+          <p class="structure-note" id="shell-status" role="status">Preparando la bisagra.</p>
+        </div>
+        <section id="funtime-controls" hidden aria-label="Controles Funtime">
+          <div class="shell-controls">
+            <label for="face-opening">Apertura facial completa</label>
+            <output id="face-value" for="face-opening">0 %</output>
+            <input id="face-opening" type="range" min="0" max="100" step="1" value="0" aria-valuetext="0 %" autocomplete="off">
+          </div>
+          <div class="face-actions">
+            <button class="inspect-toggle" id="run-face" type="button">Ejecutar apertura completa</button>
+            <button class="inspect-toggle" id="close-face" type="button">Cerrar cara</button>
+          </div>
+          <details class="face-details">
+            <summary>Controles individuales</summary>
+            <div class="shell-controls" id="forehead-controls">
+              <label for="forehead-opening">Apertura de frente</label>
+              <output id="forehead-value" for="forehead-opening">0 %</output>
+              <input id="forehead-opening" type="range" min="0" max="100" step="1" value="0" aria-valuetext="0 %" autocomplete="off" disabled>
+            </div>
+            <div class="shell-controls" id="cheek-controls">
+              <label for="cheek-opening">Apertura de mejillas</label>
+              <output id="cheek-value" for="cheek-opening">0 %</output>
+              <input id="cheek-opening" type="range" min="0" max="100" step="1" value="0" aria-valuetext="0 %" autocomplete="off" disabled>
+            </div>
+            <div class="shell-controls" id="nose-controls">
+              <label for="nose-opening">Desplazamiento de nariz</label>
+              <output id="nose-value" for="nose-opening">0 %</output>
+              <input id="nose-opening" type="range" min="0" max="100" step="1" value="0" aria-valuetext="0 %" autocomplete="off" disabled>
+            </div>
+            <div class="shell-controls" id="muzzle-controls">
+              <label for="muzzle-opening">Apertura del hocico</label>
+              <output id="muzzle-value" for="muzzle-opening">0 %</output>
+              <input id="muzzle-opening" type="range" min="0" max="100" step="1" value="0" aria-valuetext="0 %" autocomplete="off" disabled>
+            </div>
+          </details>
+        </section>
+        <div class="exterior-controls" id="exterior-controls" hidden>
+          <button class="inspect-toggle" id="restore-exterior" type="button">Restaurar cabeza exterior</button>
+        </div>
+        <p class="structure-note" id="maintenance-status" role="status"></p>
+        <details class="face-details showtime-controls">
+          <summary>Modo espectáculo — Showtime</summary>
+          <div class="face-actions">
+            <button class="inspect-toggle" id="start-showtime" type="button" disabled>Iniciar espectáculo</button>
+            <button class="inspect-toggle" id="stop-showtime" type="button" disabled>Detener espectáculo</button>
+          </div>
+          <div class="shell-controls">
+            <label for="showtime-speed">Velocidad</label>
+            <output id="showtime-speed-value" for="showtime-speed">1×</output>
+            <input id="showtime-speed" type="range" min="0.5" max="1.5" step="0.05" value="1" disabled>
+          </div>
+          <div class="shell-controls">
+            <label for="showtime-intensity">Intensidad</label>
+            <output id="showtime-intensity-value" for="showtime-intensity">100 %</output>
+            <input id="showtime-intensity" type="range" min="0" max="100" step="5" value="100" aria-valuetext="100 %" disabled>
+          </div>
+          <label class="showtime-head"><input id="showtime-head" type="checkbox" checked disabled> Movimientos de cabeza</label>
+          <label class="showtime-head"><input id="showtime-arms" type="checkbox" checked disabled> Movimientos de brazos</label>
+          <p class="structure-note" id="showtime-status" role="status"></p>
+        </details>
         <div class="section-heading"><span>Visor local</span><span id="viewer-mode-label">CÁMARA</span></div>
       </aside>
 
