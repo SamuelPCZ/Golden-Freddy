@@ -157,6 +157,9 @@ button { font: inherit; }
 .inspect-controls { display: grid; gap: 7px; }
 #center-view { grid-column: 1 / -1; min-height: 44px; }
 .hat-controls,
+.microphone-controls,
+.left-arm-controls,
+.left-arm-salute-controls,
 .jaw-controls { margin: 14px 0; }
 
 .maintenance-controls { display: grid; gap: 5px; margin-top: 14px; }

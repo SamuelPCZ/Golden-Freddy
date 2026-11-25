@@ -15,9 +15,22 @@ const centerViewButton = document.querySelector("#center-view");
 const viewerInstructions = document.querySelector("#viewer-instructions");
 const hatToggle = document.querySelector("#hat-toggle");
 const hatStatus = document.querySelector("#hat-status");
+const microphoneToggle = document.querySelector("#microphone-toggle");
+const microphoneStatus = document.querySelector("#microphone-status");
+const leftArmToggle = document.querySelector("#left-arm-toggle");
+const leftArmStatus = document.querySelector("#left-arm-status");
+const leftArmSaluteToggle = document.querySelector("#left-arm-salute-toggle");
+const leftArmSaluteStatus = document.querySelector("#left-arm-salute-status");
 const jawToggle = document.querySelector("#jaw-toggle");
 const jawStatus = document.querySelector("#jaw-status");
 const lateralAxis = new THREE.Vector3(1, 0, 0);
+const armFoldAxis = new THREE.Vector3(1, 0, 0);
+const armForearmRollAxis = new THREE.Vector3(0, 0, 1);
+const armWristAxis = new THREE.Vector3(0, 1, 0);
+const armWaveAxis = new THREE.Vector3(0, 0, 1);
+const armFoldRotation = new THREE.Quaternion();
+const armForearmRollRotation = new THREE.Quaternion();
+const armWristRotation = new THREE.Quaternion();
 const jawOpenAngle = THREE.MathUtils.degToRad(15);
 const shellOpening = document.querySelector("#shell-opening");
 const shellValue = document.querySelector("#shell-value");
@@ -26,7 +39,7 @@ const shellMaxAngle = THREE.MathUtils.degToRad(45);
 const shellControls = document.querySelector("#shell-controls");
 const maintenanceMode = document.querySelector("#maintenance-mode");
 const exteriorOption = maintenanceMode.querySelector('[value="exterior"]');
-const funtimeEnabled = false;
+const funtimeEnabled = true;
 const funtimeOption = maintenanceMode.querySelector('[value="funtime"]');
 const startShowtime = document.querySelector("#start-showtime");
 const stopShowtime = document.querySelector("#stop-showtime");
@@ -52,8 +65,8 @@ const faceValue = document.querySelector("#face-value");
 const runFace = document.querySelector("#run-face");
 const closeFace = document.querySelector("#close-face");
 const facePhases = [
-  ["forehead", 0, .21], ["cheeks", .21, .43], ["nose", .43, .57],
-  ["muzzle", .57, .81], ["jaw", .81, 1]
+  ["forehead", 0, .21], ["cheeks", .21, .81], ["nose", .21, .81],
+  ["muzzle", .21, .81], ["jaw", .81, 1]
 ];
 const exteriorControls = document.querySelector("#exterior-controls");
 const restoreExterior = document.querySelector("#restore-exterior");
@@ -117,6 +130,8 @@ let inspectionMode = false;
 let animationFrame = 0;
 let hat = null;
 let hatDrag = null;
+let microphone = null;
+let leftArm = null;
 let jaw = null;
 let shell = null;
 let exterior = null;
@@ -206,11 +221,11 @@ function updateJaw(now) {
 }
 
 // Classify original vertex indices; never edit geometry or create a proxy mesh.
-function findRigidTriangles(roots) {
+function findRigidTriangles(roots, candidateMeshes = meshObjects) {
   const bones = new Set();
   for (const root of roots) root.traverse(node => { if (node.isBone) bones.add(node); });
   const triangles = new Map();
-  for (const mesh of meshObjects) {
+  for (const mesh of candidateMeshes) {
     if (!mesh.isSkinnedMesh) continue;
     const { skinIndex, skinWeight, position } = mesh.geometry.attributes;
     if (!skinIndex || !skinWeight) continue;
@@ -365,6 +380,41 @@ function prepareExterior() {
   updateMaintenanceControls();
 }
 
+function prepareLeftArm() {
+  const mesh = findBodyMesh();
+  const bones = mesh?.skeleton.bones;
+  const shoulder = bones?.[47];
+  const elbow = bones?.[48];
+  const wrist = bones?.[49];
+  const shoulderPad = bones?.[68];
+  const geometry = mesh?.geometry;
+  if (shoulder?.name !== "L_Shoulder_jnt_028" || shoulder.parent?.name !== "Spine_jnt_09" ||
+      elbow?.name !== "L_Elbow_jnt_029" || elbow.parent !== shoulder ||
+      wrist?.name !== "L_Wrist_jnt_030" || wrist.parent !== elbow ||
+      shoulderPad?.name !== "L_ShoulderPad_jnt_042" || shoulderPad.parent !== shoulder.parent ||
+      !geometry?.index || geometry.groups.length || Array.isArray(mesh.material) ||
+      geometry.drawRange.start !== 0 || geometry.drawRange.count !== Infinity) {
+    leftArmStatus.textContent = "No se pudo verificar la cubierta del brazo izquierdo.";
+    return;
+  }
+  const rigidTriangles = findRigidTriangles([shoulder, shoulderPad], [mesh]);
+  const triangles = rigidTriangles?.get(mesh);
+  if (rigidTriangles?.size !== 1 || triangles?.size !== 2506) {
+    leftArmStatus.textContent = "No se pudo aislar con seguridad la cubierta del brazo izquierdo.";
+    return;
+  }
+  leftArm = {
+    mesh, triangles, originalGeometry: geometry, hiddenGeometry: null, removed: false,
+    bones: [shoulder, elbow, wrist],
+    restPose: [shoulder, elbow, wrist].map(bone => bone.quaternion.clone()),
+    salute: null
+  };
+  leftArmToggle.disabled = false;
+  leftArmSaluteToggle.disabled = false;
+  leftArmStatus.textContent = "Cubierta del brazo izquierdo colocada.";
+  leftArmSaluteStatus.textContent = "Brazo listo para saludar.";
+}
+
 function isExteriorRemoved() {
   return exterior?.previousOpening != null;
 }
@@ -412,6 +462,7 @@ function prepareShowtime() {
 
 function showtimeBlocker() {
   if (!hat || !shell) return "Los controles de mantenimiento todavía no están disponibles.";
+  if (leftArm?.salute) return "Espera a que termine el saludo.";
   if (hat.transition || jaw.transition || funtime?.motion) return "Espera a que termine el movimiento de mantenimiento.";
   if (isExteriorRemoved()) return "Restaura la cabeza exterior antes de iniciar.";
   if (hat.removed) return "Coloca el sombrero antes de iniciar.";
@@ -555,11 +606,13 @@ function prepareFuntime() {
 function updateMaintenanceControls() {
   const removed = isExteriorRemoved();
   const performing = Boolean(showtime?.phase);
-  const busy = Boolean(hat?.transition || jaw?.transition || performing);
-  maintenanceMode.disabled = !shell || busy;
-  exteriorOption.disabled = !exterior;
+  const armMoving = Boolean(leftArm?.salute);
+  const busy = Boolean(hat?.transition || microphone?.transition || jaw?.transition || performing || armMoving);
+  const armRemoved = Boolean(leftArm?.removed);
+  maintenanceMode.disabled = !shell || busy || armRemoved;
+  exteriorOption.disabled = !exterior || armRemoved;
   const preview = funtime?.opening != null;
-  funtimeOption.disabled = !funtimeEnabled || !funtime;
+  funtimeOption.disabled = !funtimeEnabled || !funtime || armRemoved;
   maintenanceMode.value = removed ? "exterior" : preview ? "funtime" : "shell";
   shellControls.hidden = removed || preview;
   funtimePanel.hidden = !preview;
@@ -567,13 +620,19 @@ function updateMaintenanceControls() {
     input.disabled = !preview || (key === "nose" && funtime.values.muzzle > 0);
   }
   exteriorControls.hidden = !removed;
-  shellOpening.disabled = !shell || removed || preview || performing;
-  jawToggle.disabled = !jaw || Boolean(jaw.transition) || removed || performing;
-  hatToggle.disabled = !hat || Boolean(hat.transition) || removed || performing;
-  startShowtime.disabled = !showtime || performing;
+  shellOpening.disabled = !shell || removed || preview || performing || armMoving;
+  jawToggle.disabled = !jaw || Boolean(jaw.transition) || removed || performing || armMoving;
+  hatToggle.disabled = !hat || Boolean(hat.transition) || removed || performing || armMoving;
+  microphoneToggle.disabled = !microphone || Boolean(microphone.transition) || removed || performing || armMoving;
+  leftArmToggle.disabled = !leftArm || busy || removed || preview;
+  leftArmSaluteToggle.disabled = !leftArm || performing || armMoving;
+  startShowtime.disabled = !showtime || performing || armMoving;
   stopShowtime.disabled = showtime?.phase !== "playing";
   jawStatus.hidden = removed;
   hatStatus.hidden = removed;
+  microphoneStatus.hidden = removed;
+  leftArmStatus.hidden = removed;
+  leftArmSaluteStatus.hidden = removed;
 }
 
 function showPercent(input, output, value) {
@@ -656,6 +715,10 @@ for (const { input, key } of funtimeControls) {
       return;
     }
     stopFaceMotion();
+    if (key === "cheeks") {
+      funtime.values.nose = amount;
+      funtime.values.muzzle = amount;
+    }
     if (key === "muzzle" && amount > 0 && funtime.values.nose < 1) {
       funtime.motion = { kind: "muzzle", started: performance.now(), fromNose: funtime.values.nose, target: amount };
       return;
@@ -736,7 +799,8 @@ function geometryWithoutExterior({ originalGeometry, triangles }) {
 }
 
 function setExteriorRemoved(remove) {
-  if (!exterior || remove === isExteriorRemoved() || hat.transition || jaw.transition) {
+  if (!exterior || remove === isExteriorRemoved() || leftArm?.removed ||
+      hat.transition || microphone?.transition || jaw.transition) {
     updateMaintenanceControls();
     return;
   }
@@ -763,7 +827,8 @@ function setExteriorRemoved(remove) {
 
 maintenanceMode.addEventListener("change", () => {
   const mode = maintenanceMode.value;
-  if (hat?.transition || jaw?.transition || showtime?.phase || (mode === "funtime" && !funtimeEnabled)) {
+  if (leftArm?.removed || hat?.transition || microphone?.transition || jaw?.transition || showtime?.phase ||
+      (mode === "funtime" && !funtimeEnabled)) {
     updateMaintenanceControls();
     return;
   }
@@ -773,6 +838,98 @@ maintenanceMode.addEventListener("change", () => {
   updateMaintenanceControls();
 });
 restoreExterior.addEventListener("click", () => setExteriorRemoved(false));
+leftArmToggle.addEventListener("click", () => {
+  if (!leftArm || isExteriorRemoved() || funtime?.opening != null ||
+      hat?.transition || microphone?.transition || jaw?.transition || showtime?.phase) return;
+  const remove = !leftArm.removed;
+  if (remove) {
+    leftArm.hiddenGeometry ??= geometryWithoutExterior(leftArm);
+    leftArm.mesh.geometry = leftArm.hiddenGeometry;
+  } else {
+    leftArm.mesh.geometry = leftArm.originalGeometry;
+  }
+  leftArm.removed = remove;
+  leftArm.mesh.boundingSphere = null;
+  leftArm.mesh.boundingBox = null;
+  if (selectedMesh === leftArm.mesh) clearSelection();
+  leftArmToggle.textContent = remove
+    ? "Restaurar cubierta del brazo izquierdo"
+    : "Retirar cubierta del brazo izquierdo";
+  leftArmStatus.textContent = remove
+    ? "Cubierta retirada. Endoesqueleto del brazo izquierdo visible."
+    : "Cubierta del brazo izquierdo colocada.";
+  updateMaintenanceControls();
+});
+
+function createLeftArmPose(elbowAngle, handDown = false, forearmRaised = false) {
+  const pose = leftArm.restPose.map(quaternion => quaternion.clone());
+  armFoldRotation.setFromAxisAngle(armFoldAxis, THREE.MathUtils.degToRad(elbowAngle));
+  pose[1].premultiply(armFoldRotation);
+  if (forearmRaised) {
+    armForearmRollRotation.setFromAxisAngle(armForearmRollAxis, THREE.MathUtils.degToRad(-45));
+    pose[1].premultiply(armForearmRollRotation);
+  }
+  if (handDown) {
+    armWristRotation.setFromAxisAngle(armWristAxis, THREE.MathUtils.degToRad(90));
+    pose[2].multiply(armWristRotation);
+  }
+  return pose;
+}
+
+function interpolateLeftArmPose(from, to, progress) {
+  // Use the last 20% of each phase as a mechanical hold.
+  const travelProgress = THREE.MathUtils.clamp(progress / .8, 0, 1);
+  leftArm.bones.forEach((bone, index) =>
+    bone.quaternion.slerpQuaternions(from[index], to[index], travelProgress));
+}
+
+leftArmSaluteToggle.addEventListener("click", () => {
+  if (!leftArm || leftArm.salute || showtime?.phase) return;
+  leftArm.salute = {
+    started: performance.now(),
+    cup: createLeftArmPose(70),
+    handDown: createLeftArmPose(70, true),
+    raised: createLeftArmPose(170, true, true)
+  };
+  leftArmSaluteToggle.setAttribute("aria-busy", "true");
+  leftArmSaluteStatus.textContent = "Saludo en curso.";
+  updateMaintenanceControls();
+});
+
+function updateLeftArmSalute(now) {
+  if (!leftArm?.salute) return;
+  const salute = leftArm.salute;
+  const elapsed = Math.max(0, (now - salute.started) / 1000);
+  const foldEnd = .9;
+  const handEnd = 1.7;
+  const raiseEnd = 3;
+  const waveEnd = 7.4;
+  const saluteEnd = 8.6;
+
+  if (elapsed < foldEnd) {
+    interpolateLeftArmPose(leftArm.restPose, salute.cup, elapsed / foldEnd);
+  } else if (elapsed < handEnd) {
+    interpolateLeftArmPose(salute.cup, salute.handDown, (elapsed - foldEnd) / (handEnd - foldEnd));
+  } else if (elapsed < raiseEnd) {
+    interpolateLeftArmPose(salute.handDown, salute.raised, (elapsed - handEnd) / (raiseEnd - handEnd));
+  } else if (elapsed < waveEnd) {
+    leftArm.bones[0].quaternion.copy(salute.raised[0]);
+    leftArm.bones[1].quaternion.copy(salute.raised[1]);
+    const progress = (elapsed - raiseEnd) / (waveEnd - raiseEnd);
+    const angle = -THREE.MathUtils.degToRad(18) * Math.sin(progress * Math.PI * 2);
+    armWristRotation.setFromAxisAngle(armWaveAxis, angle);
+    leftArm.bones[2].quaternion.copy(salute.raised[2]).multiply(armWristRotation);
+  } else if (elapsed < saluteEnd) {
+    interpolateLeftArmPose(salute.raised, leftArm.restPose, (elapsed - waveEnd) / (saluteEnd - waveEnd));
+  } else {
+    leftArm.bones.forEach((bone, index) => bone.quaternion.copy(leftArm.restPose[index]));
+    leftArm.salute = null;
+    leftArmSaluteToggle.removeAttribute("aria-busy");
+    leftArmSaluteStatus.textContent = "Saludo terminado. Pose original restaurada.";
+    updateMaintenanceControls();
+  }
+  refreshShowtimeBounds();
+}
 
 function refreshHatBounds() {
   scene.updateMatrixWorld(true);
@@ -873,6 +1030,31 @@ function prepareHat() {
   hatStatus.textContent = "Prueba experimental · Sombrero colocado.";
 }
 
+function prepareMicrophone() {
+  const body = findBodyMesh();
+  const bones = body?.skeleton.bones;
+  const bone = bones?.[89];
+  if (bone?.name !== "R_Prop_jnt_056" || bone.parent !== bones[76] ||
+      bones[76]?.name !== "R_Wrist_jnt_047") {
+    microphoneStatus.textContent = "No se encontró el hueso esperado del micrófono.";
+    return;
+  }
+  microphone = {
+    mesh: body,
+    bone,
+    originalPosition: bone.position.clone(),
+    removalOffset: new THREE.Vector3(
+      modelBounds.getSize(new THREE.Vector3()).x * .85,
+      modelBounds.getSize(new THREE.Vector3()).y * .05,
+      0
+    ),
+    removed: false,
+    transition: null
+  };
+  microphoneToggle.disabled = false;
+  microphoneStatus.textContent = "Micrófono colocado.";
+}
+
 hatToggle.addEventListener("click", () => {
   if (!hat || hat.transition || isExteriorRemoved() || showtime?.phase) return;
   finishHatDrag();
@@ -921,6 +1103,46 @@ function updateHat(now) {
       : "Sombrero retirado · Arrastre desactivado: pesos o triángulos ambiguos.")
     : "Sombrero colocado sobre la carcasa.";
 }
+
+  microphoneToggle.addEventListener("click", () => {
+    if (!microphone || microphone.transition || isExteriorRemoved() || showtime?.phase) return;
+    const { bone } = microphone;
+    bone.parent.updateWorldMatrix(true, false);
+    const originalWorld = bone.parent.localToWorld(bone.position.clone());
+    const removedLocal = bone.parent.worldToLocal(
+      originalWorld.add(microphone.removalOffset)
+    );
+    const removing = !microphone.removed;
+    microphone.transition = {
+      started: performance.now(),
+      from: bone.position.clone(),
+      to: removing ? removedLocal : microphone.originalPosition.clone(),
+      removing
+    };
+    updateMaintenanceControls();
+    microphoneToggle.setAttribute("aria-busy", "true");
+    microphoneStatus.textContent = microphone.removed ? "Colocando micrófono…" : "Retirando micrófono…";
+  });
+
+  function updateMicrophone(now) {
+    if (!microphone?.transition) return;
+    const transition = microphone.transition;
+    const progress = THREE.MathUtils.clamp((now - transition.started) / 1000, 0, 1);
+    const eased = progress * progress * (3 - 2 * progress);
+    microphone.bone.position.lerpVectors(transition.from, transition.to, eased);
+    microphone.mesh.boundingSphere = null;
+    microphone.mesh.boundingBox = null;
+    if (progress < 1) return;
+    microphone.removed = transition.removing;
+    microphone.bone.position.copy(transition.to);
+    microphone.transition = null;
+    updateMaintenanceControls();
+    microphoneToggle.removeAttribute("aria-busy");
+    microphoneToggle.textContent = microphone.removed ? "Colocar micrófono" : "Retirar micrófono";
+    microphoneStatus.textContent = microphone.removed
+      ? "Micrófono retirado."
+      : "Micrófono colocado en la mano.";
+  }
 
 function setLoadingMessage(message) {
   statusPanel.classList.remove("is-error");
@@ -1198,9 +1420,11 @@ loader.load(
 
       inspectModel(gltf, modelBounds);
       prepareHat();
+      prepareMicrophone();
       prepareJaw();
       prepareShell();
       prepareExterior();
+      prepareLeftArm();
       if (funtimeEnabled) prepareFuntime();
       prepareShowtime();
       frameModel();
@@ -1226,7 +1450,9 @@ function render(now = performance.now()) {
   updateJaw(now);
   updateFaceMotion(now);
   updateShowtime(deltaTime);
+  updateLeftArmSalute(now);
   updateHat(now);
+  updateMicrophone(now);
   if (controls.enabled) controls.update();
   renderer.render(scene, camera);
 }
@@ -1236,6 +1462,7 @@ window.addEventListener("beforeunload", () => {
   cancelAnimationFrame(animationFrame);
   controls.dispose();
   exterior?.hiddenGeometry?.dispose();
+  leftArm?.hiddenGeometry?.dispose();
   funtime?.geometry.dispose();
   funtime?.plates.geometry.dispose();
   renderer.dispose();
