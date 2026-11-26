@@ -29,14 +29,6 @@ const gazeCues = [
   [7.29, 0, 0], [7.47, 1.1, -.4], [7.99, 1.1, -.4],
   [8.19, -.9, 0], [8.72, -.9, 0], [8.95, 0, 0], [cycle, 0, 0]
 ];
-// One compact lift and two wrist beats, then a return to the rest pose.
-const waveCues = [
-  [0, 0, 0, 0], [5.9, 0, 0, 0], [6.55, 29, 84, -6],
-  [6.70, 29, 84, -6], [6.93, 29, 84, 8], [7.16, 29, 84, -8],
-  [7.39, 29, 84, 7], [7.62, 29, 84, -6], [7.82, 29, 84, -6],
-  [8.52, 0, 0, 0], [cycle, 0, 0, 0]
-];
-
 function ease(value) {
   const t = Math.max(0, Math.min(1, value));
   return t * t * (3 - 2 * t);
@@ -52,8 +44,9 @@ function sampleCues(cues, time) {
 }
 
 export function sampleShowtime(seconds) {
-  let time = seconds % cycle;
-  const wave = sampleCues(waveCues, time);
+  const cycleTime = seconds % cycle;
+  const saluteTime = cycleTime >= 5.9 ? cycleTime - 5.9 : null;
+  let time = cycleTime;
   const [spineYaw, spineRoll, micPitch] = sampleCues(stageCues, time);
   const [eyeYaw, eyePitch] = sampleCues(gazeCues, time);
   let phrase = phrases[0];
@@ -73,5 +66,5 @@ export function sampleShowtime(seconds) {
   }
 
   const [yaw, pitch, roll] = sampleCues(phrase.cues, time);
-  return { jaw, yaw, pitch, roll, wave, spineYaw, spineRoll, micPitch, eyeYaw, eyePitch };
+  return { jaw, yaw, pitch, roll, saluteTime, spineYaw, spineRoll, micPitch, eyeYaw, eyePitch };
 }

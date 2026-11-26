@@ -484,6 +484,9 @@ startShowtime.addEventListener("click", () => {
     .map(([role, bone]) => [role, {
       bone, position: bone.position.clone(), quaternion: bone.quaternion.clone(), scale: bone.scale.clone()
     }]));
+  const armRestPose = ["freeShoulder", "freeElbow", "freeWrist"]
+    .map(role => showtime.reference[role]?.quaternion);
+  showtime.armSalute = armRestPose.every(Boolean) ? createLeftArmSalute(armRestPose) : null;
   showtime.elapsed = 0;
   showtime.headMix = Number(showtimeHead.checked);
   showtime.armsMix = Number(showtimeArms.checked);
@@ -546,7 +549,7 @@ function updateShowtime(deltaTime) {
     const intensity = showtime.intensity;
     const headAmount = intensity * showtime.headMix;
     const armAmount = intensity * showtime.armsMix;
-    const { jaw: opening, pitch, yaw, roll, wave, spineYaw, spineRoll, micPitch, eyeYaw, eyePitch } =
+    const { jaw: opening, pitch, yaw, roll, saluteTime, spineYaw, spineRoll, micPitch, eyeYaw, eyePitch } =
       sampleShowtime(showtime.elapsed);
     const { spine, head, neck, rightEye, leftEye, micArm, freeShoulder, freeElbow, freeWrist } =
       showtime.reference;
@@ -559,10 +562,18 @@ function updateShowtime(deltaTime) {
       rotateShowtimeBone(leftEye, eyePitch * headAmount, eyeYaw * headAmount, 0);
     }
     if (micArm) rotateShowtimeBone(micArm, micPitch * armAmount, 0, 0);
-    if (freeShoulder) {
-      rotateShowtimeBone(freeShoulder, 0, 0, wave[0] * armAmount);
-      rotateShowtimeBone(freeElbow, 0, 0, wave[1] * armAmount);
-      rotateShowtimeBone(freeWrist, 0, 0, wave[2] * armAmount);
+    if (freeShoulder && showtime.armSalute) {
+      const bones = [freeShoulder, freeElbow, freeWrist];
+      const { rest: restPose } = showtime.armSalute;
+      const salutePose = saluteTime == null ? null : sampleLeftArmSalute(saluteTime, showtime.armSalute);
+      bones.forEach((pose, index) => {
+        const bone = pose.bone;
+        if (salutePose) {
+          bone.quaternion.slerpQuaternions(restPose[index], salutePose[index], armAmount);
+        } else {
+          bone.quaternion.copy(restPose[index]);
+        }
+      });
     }
   } else {
     showtime.elapsed += deltaTime;
@@ -861,8 +872,8 @@ leftArmToggle.addEventListener("click", () => {
   updateMaintenanceControls();
 });
 
-function createLeftArmPose(elbowAngle, handDown = false, forearmRaised = false) {
-  const pose = leftArm.restPose.map(quaternion => quaternion.clone());
+function createLeftArmPose(restPose, elbowAngle, handDown = false, forearmRaised = false) {
+  const pose = restPose.map(quaternion => quaternion.clone());
   armFoldRotation.setFromAxisAngle(armFoldAxis, THREE.MathUtils.degToRad(elbowAngle));
   pose[1].premultiply(armFoldRotation);
   if (forearmRaised) {
@@ -876,57 +887,67 @@ function createLeftArmPose(elbowAngle, handDown = false, forearmRaised = false) 
   return pose;
 }
 
-function interpolateLeftArmPose(from, to, progress) {
-  // Use the last 20% of each phase as a mechanical hold.
-  const travelProgress = THREE.MathUtils.clamp(progress / .8, 0, 1);
-  leftArm.bones.forEach((bone, index) =>
-    bone.quaternion.slerpQuaternions(from[index], to[index], travelProgress));
+function createLeftArmSalute(restPose) {
+  return {
+    rest: restPose,
+    cup: createLeftArmPose(restPose, 70),
+    raised: createLeftArmPose(restPose, 170, true, true)
+  };
+}
+
+function interpolateLeftArmPose(from, to, progress, smooth = false) {
+  const clampedProgress = THREE.MathUtils.clamp(progress, 0, 1);
+  const travelProgress = smooth ? smoothStep(clampedProgress) : clampedProgress;
+  return from.map((quaternion, index) => quaternion.clone().slerp(to[index], travelProgress));
 }
 
 leftArmSaluteToggle.addEventListener("click", () => {
   if (!leftArm || leftArm.salute || showtime?.phase) return;
   leftArm.salute = {
     started: performance.now(),
-    cup: createLeftArmPose(70),
-    handDown: createLeftArmPose(70, true),
-    raised: createLeftArmPose(170, true, true)
+    ...createLeftArmSalute(leftArm.restPose)
   };
   leftArmSaluteToggle.setAttribute("aria-busy", "true");
   leftArmSaluteStatus.textContent = "Saludo en curso.";
   updateMaintenanceControls();
 });
 
-function updateLeftArmSalute(now) {
-  if (!leftArm?.salute) return;
-  const salute = leftArm.salute;
-  const elapsed = Math.max(0, (now - salute.started) / 1000);
-  const foldEnd = .9;
-  const handEnd = 1.7;
-  const raiseEnd = 3;
-  const waveEnd = 7.4;
-  const saluteEnd = 8.6;
+function sampleLeftArmSalute(elapsed, salute) {
+  const foldEnd = .55;
+  const raiseEnd = 1.7;
+  const waveEnd = 3;
+  const saluteEnd = 3.65;
 
   if (elapsed < foldEnd) {
-    interpolateLeftArmPose(leftArm.restPose, salute.cup, elapsed / foldEnd);
-  } else if (elapsed < handEnd) {
-    interpolateLeftArmPose(salute.cup, salute.handDown, (elapsed - foldEnd) / (handEnd - foldEnd));
+    return interpolateLeftArmPose(salute.rest, salute.cup, elapsed / foldEnd);
   } else if (elapsed < raiseEnd) {
-    interpolateLeftArmPose(salute.handDown, salute.raised, (elapsed - handEnd) / (raiseEnd - handEnd));
+    return interpolateLeftArmPose(salute.cup, salute.raised, (elapsed - foldEnd) / (raiseEnd - foldEnd));
   } else if (elapsed < waveEnd) {
-    leftArm.bones[0].quaternion.copy(salute.raised[0]);
-    leftArm.bones[1].quaternion.copy(salute.raised[1]);
+    const pose = salute.raised.map(quaternion => quaternion.clone());
     const progress = (elapsed - raiseEnd) / (waveEnd - raiseEnd);
-    const angle = -THREE.MathUtils.degToRad(18) * Math.sin(progress * Math.PI * 2);
+    const waveEnvelope = Math.sin(progress * Math.PI);
+    const angle = -THREE.MathUtils.degToRad(12) * waveEnvelope * Math.sin(progress * Math.PI * 4);
     armWristRotation.setFromAxisAngle(armWaveAxis, angle);
-    leftArm.bones[2].quaternion.copy(salute.raised[2]).multiply(armWristRotation);
+    pose[2].multiply(armWristRotation);
+    return pose;
   } else if (elapsed < saluteEnd) {
-    interpolateLeftArmPose(salute.raised, leftArm.restPose, (elapsed - waveEnd) / (saluteEnd - waveEnd));
-  } else {
-    leftArm.bones.forEach((bone, index) => bone.quaternion.copy(leftArm.restPose[index]));
+    return interpolateLeftArmPose(salute.raised, salute.rest,
+      (elapsed - waveEnd) / (saluteEnd - waveEnd), true);
+  }
+  return null;
+}
+
+function updateLeftArmSalute(now) {
+  if (!leftArm?.salute) return;
+  const elapsed = Math.max(0, (now - leftArm.salute.started) / 1000);
+  const pose = sampleLeftArmSalute(elapsed, leftArm.salute);
+  if (!pose) {
     leftArm.salute = null;
     leftArmSaluteToggle.removeAttribute("aria-busy");
     leftArmSaluteStatus.textContent = "Saludo terminado. Pose original restaurada.";
     updateMaintenanceControls();
+  } else {
+    leftArm.bones.forEach((bone, index) => bone.quaternion.copy(pose[index]));
   }
   refreshShowtimeBounds();
 }
